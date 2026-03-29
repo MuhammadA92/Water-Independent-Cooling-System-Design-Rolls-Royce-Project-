@@ -70,6 +70,36 @@ The project was iterative rather than fixed from the start. The slides show that
 
 The final result was then compared against industry expectations. The report notes that water-independent air-cooled heat rejection systems typically show parasitic loads in the range of 4–6% of power output, while the model predicted 21.5 kW per MWth rejected, approximately 2.15% of power output, which was considered to be of the same order of magnitude and therefore a promising result. :contentReference[oaicite:11]{index=11}
 
+## Computational Modelling
+
+A key part of my contribution involved implementing a computational model to simulate and evaluate the performance of the heat rejection system under varying operating conditions.
+
+The model:
+
+- Simulates system behaviour across a range of heat loads (Q_total)
+- Performs a parametric sweep to analyse system sensitivity
+- Evaluates performance metrics including:
+  - number of cooling modules required
+  - parasitic fan power
+  - airflow requirements
+  - thermal performance (UA margin, outlet temperatures)
+
+The model incorporates engineering calculations across multiple domains, including:
+- thermodynamics (enthalpy, phase change, heat transfer)
+- fluid dynamics (flow rates, friction losses, pressure drop)
+- heat exchanger design (LMTD, UA analysis)
+- system-level optimisation and constraints
+
+It also includes:
+
+- iterative optimisation to determine required system size
+- constraint-based stopping conditions (e.g. parasitic load limits)
+- validation checks against realistic operating ranges
+
+The implementation is structured as a modular MATLAB model, allowing different subsystems (air cooling, thermosyphons, condensation, flow) to be analysed and modified independently.
+
+See `/code/thermosyphon_model.m` for full implementation.
+
 ## Outcome
 The final concept used porous metal cubes with integrated thermosyphons and dry coolers to reduce footprint and pump work in the intermediate safety loops. The design was judged promising because it achieved a reasonable parasitic load while maintaining the safety separation required for the helium loop. The report concludes that the concept optimised footprint and parasitic load by using porous metal cubes with integrated thermosyphons, and our team’s work placed 3rd overall in a field of 20+ teams across multiple universities. :contentReference[oaicite:12]{index=12}
 
