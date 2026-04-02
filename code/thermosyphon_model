@@ -1,0 +1,420 @@
+clear; clc; close all;
+
+%% Settings
+Q_base_MW = 147.7;
+dQ_MW = 10;
+max_steps_each_side = 25;
+
+max_modules = 5000;
+max_parasitic_frac = 0.20;
+min_Q_MW = 10;
+
+%% Build Q vector
+Q_list_MW = Q_base_MW;
+
+Qk = Q_base_MW - dQ_MW;
+for i = 1:max_steps_each_side
+    if Qk < min_Q_MW
+        break;
+    end
+    Q_list_MW(end+1) = Qk; %#ok<SAGROW>
+    Qk = Qk - dQ_MW;
+end
+
+Qk = Q_base_MW + dQ_MW;
+for i = 1:max_steps_each_side
+    Q_list_MW(end+1) = Qk; %#ok<SAGROW>
+    Qk = Qk + dQ_MW;
+end
+
+Q_down = sort(Q_list_MW(Q_list_MW <= Q_base_MW), 'descend');
+Q_up   = sort(Q_list_MW(Q_list_MW >= Q_base_MW), 'ascend');
+Q_vec_MW = [Q_down, Q_up(2:end)];
+
+%% Run sweep
+n = numel(Q_vec_MW);
+
+Q_MW        = nan(n,1);
+N_modules   = nan(n,1);
+Pfan_MW     = nan(n,1);
+Vdot_m3s    = nan(n,1);
+UA_margin   = nan(n,1);
+Tair_out_C  = nan(n,1);
+N_TPCT      = nan(n,1);
+
+stop_idx = n;
+
+for k = 1:n
+    Q_MW(k) = Q_vec_MW(k);
+    out = steam_sponge_model_run(Q_MW(k) * 1e6);
+
+    if isfield(out,'N_modules');          N_modules(k) = out.N_modules; end
+    if isfield(out,'P_fan_total_W');      Pfan_MW(k) = out.P_fan_total_W / 1e6; end
+    if isfield(out,'Vdot_air_total_m3s'); Vdot_m3s(k) = out.Vdot_air_total_m3s; end
+    if isfield(out,'UA_margin');          UA_margin(k) = out.UA_margin; end
+    if isfield(out,'T_air_out_C');        Tair_out_C(k) = out.T_air_out_C; end
+    if isfield(out,'N_TPCT_total');       N_TPCT(k) = out.N_TPCT_total; end
+
+    parasitic_frac = Pfan_MW(k) * 1e6 / (Q_MW(k) * 1e6);
+
+    if (~isnan(N_modules(k)) && N_modules(k) > max_modules) || ...
+       (~isnan(parasitic_frac) && parasitic_frac > max_parasitic_frac)
+        stop_idx = k;
+        break;
+    end
+end
+
+Q_MW       = Q_MW(1:stop_idx);
+N_modules  = N_modules(1:stop_idx);
+Pfan_MW    = Pfan_MW(1:stop_idx);
+Vdot_m3s   = Vdot_m3s(1:stop_idx);
+UA_margin  = UA_margin(1:stop_idx);
+Tair_out_C = Tair_out_C(1:stop_idx);
+N_TPCT     = N_TPCT(1:stop_idx);
+
+idx0 = find(abs(Q_MW - Q_base_MW) < 1e-6, 1, 'first');
+
+dPfan_pct    = 100 * (Pfan_MW - Pfan_MW(idx0)) / Pfan_MW(idx0);
+dModules_pct = 100 * (N_modules - N_modules(idx0)) / N_modules(idx0);
+
+%% Summary table
+T = table(Q_MW, N_modules, N_TPCT, Pfan_MW, Vdot_m3s, Tair_out_C, UA_margin, dPfan_pct, dModules_pct, ...
+    'VariableNames', {'Q_total_MW','N_modules','N_TPCT_total','P_fan_MW','Vdot_air_m3s','T_air_out_C','UA_margin','dPfan_pct','dModules_pct'});
+
+disp('==================== RESULTS SUMMARY ====================');
+disp(T);
+
+%% Plots
+figure;
+plot(Q_MW, Pfan_MW, 'o-', 'LineWidth', 1.5);
+grid on;
+xlabel('Q_{total} [MW]');
+ylabel('Fan parasitic power [MW]');
+title('P_{fan} vs Q_{total}');
+
+figure;
+plot(Q_MW, dPfan_pct, 'o-', 'LineWidth', 1.5);
+grid on;
+xlabel('Q_{total} [MW]');
+ylabel('\Delta P_{fan} vs baseline [%]');
+title('Percent change in parasitic load');
+
+%% Main model
+function out = steam_sponge_model_run(Q_total_in)
+
+Q_total = Q_total_in;
+
+%% Inputs
+T_air_in_C = 20;
+P_amb = 101325;
+dT_air = 15;
+cp_air = 1005;
+rho_air = 1.177;
+dP_air = 225;
+eta_fan = 0.65;
+crosswind_multiplier = 1.10;
+
+U_overall = 40;
+F_LMTD = 0.98;
+
+Tsat_C = 65;
+Psat_bar = 0.25;
+x_in = 0.88;
+x_out = 0.0;
+h_fg = 2.346e6;
+
+g = 9.81;
+T_cond_surface_C = 62;
+
+%% Fluid properties
+st = satWater_simple(Tsat_C);
+
+h_in = st.hf + x_in * h_fg;
+h_out = st.hf + x_out * h_fg;
+dh = h_in - h_out;
+
+m_dot_mix = Q_total / dh;
+m_dot_vapor = x_in * m_dot_mix;
+
+mu_air = 1.90e-5;
+k_air = 0.027;
+Pr_air = cp_air * mu_air / k_air; %#ok<NASGU>
+
+%% TPCT geometry
+tp.OD = 0.0127;
+tp.t_wall = 0.001016;
+tp.ID = tp.OD - 2 * tp.t_wall;
+
+tp.Lev = 1.50;
+tp.Lco = 3.00;
+
+tp.k_wall = 390;
+
+Aev_od = pi * tp.OD * tp.Lev;
+Aev_id = pi * tp.ID * tp.Lev;
+Aco_id = pi * tp.ID * tp.Lco;
+
+R_wall_ev = log(tp.OD / tp.ID) / (2 * pi * tp.k_wall * tp.Lev);
+R_wall_co = log(tp.OD / tp.ID) / (2 * pi * tp.k_wall * tp.Lco);
+
+%% Foam properties
+foam.eps = 0.95; %#ok<STRNU>
+foam.a_s = 1000;
+foam.k_eff = 5.8;
+foam.K_perm = 2e-8;
+foam.t_lig = 0.0008;
+
+foam.t_receiver = 0.020;
+foam.F_cond_enh = 1.0;
+
+r0 = tp.OD / 2;
+r1 = r0 + foam.t_receiver;
+
+A_cs_foam = pi * (r1^2 - r0^2);
+V_foam = A_cs_foam * tp.Lev;
+A_foam_geom = foam.a_s * V_foam;
+
+%% Steam-side condensation
+w = satWater_simple(Tsat_C);
+
+mu_l = muWater_simple(Tsat_C);
+k_l = kWater_simple(Tsat_C);
+
+dT_steam_receiver = 8;
+
+h_nusselt = hFilmCond_NusseltVertical( ...
+    w.rho_l, w.rho_v, mu_l, k_l, h_fg, g, tp.Lev, dT_steam_receiver);
+
+h_steam = foam.F_cond_enh * h_nusselt;
+
+L_fin = foam.t_receiver;
+m = sqrt(2 * h_steam / (foam.k_eff * foam.t_lig));
+eta_foam = tanh(m * L_fin) / (m * L_fin);
+eta_foam = max(min(eta_foam, 1), 0.05);
+
+A_eff_steam = Aev_od + eta_foam * A_foam_geom;
+R_steam = 1 / (h_steam * A_eff_steam);
+
+%% Evaporator side
+h_boil = 12000;
+R_boil = 1 / (h_boil * Aev_id);
+
+R_evap_total = R_steam + R_wall_ev + R_boil;
+dT_allow_evap = 12;
+
+%% Air cooler
+coil.vendor = 'Kelvion RF-NC101E4H';
+coil.Ao_total_per_module = 197.1;
+coil.airflow_m3ph = 19400;
+
+coil.Vdot_air_mod = coil.airflow_m3ph / 3600;
+
+coil.mod_W = 1.610;
+coil.mod_H = 1.350;
+coil.A_frontal = coil.mod_W * coil.mod_H;
+
+V_face_vendor = coil.Vdot_air_mod / coil.A_frontal; %#ok<NASGU>
+
+mdot_air_mod = rho_air * coil.Vdot_air_mod;
+Qcap_mod = mdot_air_mod * cp_air * dT_air;
+Qcap_mod_effective = Qcap_mod / crosswind_multiplier;
+
+N_modules = max(1, ceil(Q_total / Qcap_mod_effective));
+
+Vdot_air_total = coil.Vdot_air_mod * N_modules;
+P_fan_total = dP_air * Vdot_air_total / eta_fan;
+
+T_air_out_C = T_air_in_C + dT_air;
+DT1 = T_cond_surface_C - T_air_in_C;
+DT2 = T_cond_surface_C - T_air_out_C;
+DTlm = (DT1 - DT2) / log(DT1 / DT2);
+
+UA_req = Q_total / (F_LMTD * DTlm);
+UA_avail = U_overall * coil.Ao_total_per_module * N_modules;
+UA_margin = UA_avail / UA_req;
+
+%% TPCT limits
+T_tp_C = (Tsat_C + T_cond_surface_C) / 2;
+wt = satWater_simple(T_tp_C);
+
+sigma_w = surfaceTension_IAPWS2014(T_tp_C);
+A_v = pi * (tp.ID^2) / 4;
+
+Qmax_flood = QmaxFlood_FaghriStyle(tp.ID, A_v, wt.rho_l, wt.rho_v, h_fg, sigma_w, g);
+Qmax_design = 0.60 * Qmax_flood;
+
+qCHF_frac = 0.30;
+qCHF_Zuber = CHF_ZuberPoolBoiling(wt.rho_l, wt.rho_v, h_fg, sigma_w, g);
+Qmax_boil = qCHF_frac * qCHF_Zuber * (pi * tp.ID * tp.Lev);
+
+a_v = 430;
+G_sonic_allow = 0.25 * wt.rho_v * a_v;
+Qmax_sonic = G_sonic_allow * A_v * h_fg;
+
+Qmax_tpct = min([Qmax_design, Qmax_boil, Qmax_sonic]);
+
+%% Number of pipes
+h_cond_int = 12000;
+R_cond_int = 1 / (h_cond_int * Aco_id);
+
+R_air_total = 1 / UA_avail;
+
+N_pipes = 5000;
+while true
+    Q_pipe = Q_total / N_pipes;
+
+    dT_evap = Q_pipe * R_evap_total;
+
+    R_air_per_pipe = R_air_total * N_pipes;
+    R_cond_total = R_cond_int + R_wall_co + R_air_per_pipe;
+    dT_cond = Q_pipe * R_cond_total;
+
+    limits_ok = (Q_pipe <= Qmax_tpct);
+    dT_ok = (dT_evap <= dT_allow_evap);
+
+    if limits_ok && dT_ok
+        break;
+    end
+
+    if ~limits_ok
+        N_pipes = N_pipes + 2000;
+    else
+        N_pipes = N_pipes + 500;
+    end
+end
+
+Q_pipe = Q_total / N_pipes;
+dT_evap = Q_pipe * R_evap_total;
+dT_cond = Q_pipe * R_cond_total;
+dT_total_pipe = dT_evap + dT_cond; %#ok<NASGU>
+
+%% Drainage check
+m_dot_cond_total = m_dot_vapor;
+m_dot_cond_per_pipe = m_dot_cond_total / N_pipes;
+Vdot_cond_per_pipe = m_dot_cond_per_pipe / w.rho_l;
+
+v_Darcy = Vdot_cond_per_pipe / A_cs_foam;
+dP_dz = mu_l * v_Darcy / foam.K_perm;
+dP_total = dP_dz * tp.Lev;
+dP_head = w.rho_l * g * tp.Lev;
+
+drain_ok = (dP_total <= 0.5 * dP_head); %#ok<NASGU>
+
+%% Print report
+fprintf('\n==================== DESIGN REPORT ====================\n');
+fprintf('Q_total = %.2f MW\n', Q_total / 1e6);
+
+fprintf('\nSteam side\n');
+fprintf('Tsat = %.1f C, Psat = %.2f bar, x_in = %.2f\n', Tsat_C, Psat_bar, x_in);
+fprintf('m_dot_mix = %.2f kg/s, m_dot_vapor = %.2f kg/s\n', m_dot_mix, m_dot_vapor);
+
+fprintf('\nReceiver side\n');
+fprintf('h_nusselt = %.0f W/m^2K, h_steam = %.0f W/m^2K\n', h_nusselt, h_steam);
+fprintf('eta_foam = %.3f, A_eff_steam = %.3f m^2\n', eta_foam, A_eff_steam);
+
+fprintf('\nAir cooler\n');
+fprintf('Vendor module: %s\n', coil.vendor);
+fprintf('Ao per module = %.1f m^2, airflow per module = %.1f m^3/s\n', ...
+    coil.Ao_total_per_module, coil.Vdot_air_mod);
+fprintf('Qcap_mod = %.1f kW\n', Qcap_mod / 1e3);
+fprintf('Effective Qcap_mod = %.1f kW\n', Qcap_mod_effective / 1e3);
+fprintf('N_modules = %d\n', N_modules);
+fprintf('Total airflow = %.1f m^3/s, fan power = %.2f MW\n', Vdot_air_total, P_fan_total / 1e6);
+
+fprintf('\nUA check\n');
+fprintf('LMTD = %.2f K\n', DTlm);
+fprintf('UA required = %.3e W/K\n', UA_req);
+fprintf('UA available = %.3e W/K\n', UA_avail);
+fprintf('UA margin = %.2f\n', UA_margin);
+
+fprintf('\nTPCT limits\n');
+fprintf('Qmax_flood*0.60 = %.2f kW\n', Qmax_design / 1e3);
+fprintf('Qmax_boil = %.2f kW\n', Qmax_boil / 1e3);
+fprintf('Qmax_sonic = %.2f kW\n', Qmax_sonic / 1e3);
+fprintf('Qmax_tpct = %.2f kW\n', Qmax_tpct / 1e3);
+
+fprintf('\nSelected TPCT count\n');
+fprintf('N_pipes = %d, Q_pipe = %.2f kW\n', N_pipes, Q_pipe / 1e3);
+fprintf('dT_evap = %.2f K, dT_cond = %.2f K\n', dT_evap, dT_cond);
+
+fprintf('\nDrainage\n');
+fprintf('Vdot_cond_per_pipe = %.3e m^3/s\n', Vdot_cond_per_pipe);
+fprintf('Darcy velocity = %.3e m/s\n', v_Darcy);
+fprintf('Required dP = %.0f Pa, available head = %.0f Pa\n', dP_total, dP_head);
+
+fprintf('=======================================================\n');
+
+%% Output struct
+out = struct();
+out.Q_total_W = Q_total;
+out.N_modules = N_modules;
+out.P_fan_total_W = P_fan_total;
+out.Vdot_air_total_m3s = Vdot_air_total;
+out.T_air_out_C = T_air_out_C;
+out.UA_req_WK = UA_req;
+out.UA_avail_WK = UA_avail;
+out.UA_margin = UA_margin;
+out.Qcap_mod_effective_W = Qcap_mod_effective;
+out.Ao_total_per_module_m2 = coil.Ao_total_per_module;
+out.Vdot_air_mod_m3s = coil.Vdot_air_mod;
+out.A_frontal_m2 = coil.A_frontal;
+out.mod_W_m = coil.mod_W;
+out.mod_H_m = coil.mod_H;
+out.N_TPCT_total = N_pipes;
+
+end
+
+%% Helper functions
+function st = satWater_simple(T_C)
+
+T = [50 55 60 65 70 75 80 85 90 95 100];
+ps_MPa = [0.012352 0.015761 0.019946 0.025042 0.031201 0.038563 0.047373 0.057834 0.070140 0.084552 0.101325];
+rho_l  = [988.05 985.65 983.16 980.52 977.76 974.89 971.91 968.82 965.62 962.33 958.37];
+rho_v  = [0.08302 0.10266 0.13043 0.16146 0.19833 0.24418 0.29216 0.34569 0.41451 0.49220 0.59752];
+hf_kJ  = [209.33 230.23 251.18 272.12 292.98 313.93 334.91 355.90 376.92 397.96 419.04];
+hfg_kJ = [2382.7 2370.7 2357.7 2345.4 2333.8 2321.4 2308.8 2296.0 2283.2 2270.2 2257.0];
+
+T_C = max(min(T_C, max(T)), min(T));
+
+st.psat = interp1(T, ps_MPa, T_C, 'linear') * 1e6;
+st.rho_l = interp1(T, rho_l, T_C, 'linear');
+st.rho_v = interp1(T, rho_v, T_C, 'linear');
+st.hf = interp1(T, hf_kJ, T_C, 'linear') * 1e3;
+st.hfg = interp1(T, hfg_kJ, T_C, 'linear') * 1e3;
+
+end
+
+function mu = muWater_simple(T_C)
+T = T_C + 273.15;
+mu = 2.414e-5 * 10^(247.8 / (T - 140));
+end
+
+function k = kWater_simple(T_C)
+k = 0.561 + 0.0019 * T_C - 1.0e-5 * T_C.^2;
+end
+
+function h = hFilmCond_NusseltVertical(rhoL, rhoV, muL, kL, hfg, g, L, dT)
+h = 0.943 * (rhoL * (rhoL - rhoV) * g * hfg * kL^3 / (muL * L * max(dT,1e-6)))^(1/4);
+end
+
+function sigma = surfaceTension_IAPWS2014(T_C)
+T = T_C + 273.15;
+Tc = 647.096;
+tau = 1 - T / Tc;
+B = 235.8e-3;
+mu = 1.256;
+b = -0.625;
+sigma = B * (tau^mu) * (1 + b * tau);
+end
+
+function Qmax = QmaxFlood_FaghriStyle(D, Av, rhoL, rhoV, hfg, sigma, g)
+Bo = sqrt((rhoL - rhoV) * g * D^2 / sigma);
+K = (rhoL / rhoV)^0.14 * (tanh(sqrt(Bo)))^2;
+term1 = (g * sigma * (rhoL - rhoV))^(0.25);
+term2 = (rhoV^(-0.5) + rhoL^(-0.5))^(-2);
+Qmax = K * hfg * Av * term1 * term2;
+end
+
+function qCHF = CHF_ZuberPoolBoiling(rhoL, rhoV, hfg, sigma, g)
+qCHF = 0.131 * hfg * sqrt(rhoV) * (sigma * g * (rhoL - rhoV))^(1/4);
+end
