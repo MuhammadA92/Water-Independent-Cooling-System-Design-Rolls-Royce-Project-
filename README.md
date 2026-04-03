@@ -101,7 +101,7 @@ The implementation is structured as a modular MATLAB model, allowing different s
 See `/code/thermosyphon_model.m` for full implementation.
 
 ## Outcome
-The final concept used porous metal cubes with integrated thermosyphons and dry coolers to reduce footprint and pump work in the intermediate safety loops. The design was judged promising because it achieved a reasonable parasitic load while maintaining the safety separation required for the helium loop. The report concludes that the concept optimised footprint and parasitic load by using porous metal cubes with integrated thermosyphons, and our team’s work placed 3rd overall in a field of 20+ teams across multiple universities. :contentReference[oaicite:12]{index=12}
+The final concept used porous metal cubes with integrated thermosyphons and dry coolers to reduce footprint and pump work in the intermediate safety loops. The design was judged promising because it achieved a reasonable parasitic load while maintaining the safety separation required for the helium loop. The report concludes that the concept optimised footprint and parasitic load by using porous metal cubes with integrated thermosyphons, and our team’s work placed 3rd overall in a field of 20+ teams across multiple universities (being UCL, Imperial, Oxford and Cambridge).
 
 ## What I Learned
 This project strengthened my ability to:
