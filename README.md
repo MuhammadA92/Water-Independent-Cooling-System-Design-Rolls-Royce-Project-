@@ -3,7 +3,7 @@
 ## Overview
 This project formed part of a multi-university engineering programme run in collaboration with Rolls-Royce, involving more than 20 teams from universities including Imperial, UCL, Oxford, and Cambridge. Our team placed 3rd overall.
 
-My subgroup worked on the independent water heat rejection stage of the wider system. The challenge was to design a heat rejection solution for a scaled high-temperature gas reactor configuration operating in water-scarce regions, where conventional water-intensive cooling methods were unsuitable. The system therefore had to reject approximately 147.7 MWth while balancing three competing objectives: low parasitic load, compact footprint, and operational safety. :contentReference[oaicite:0]{index=0}
+My subgroup worked on the independent water heat rejection stage of the wider system. The challenge was to design a heat rejection solution for a scaled high-temperature gas reactor configuration operating in water-scarce regions, where conventional water-intensive cooling methods were unsuitable. The system therefore had to reject approximately 147.7 MWth while balancing three competing objectives: low parasitic load, compact footprint, and operational safety.
 
 ## My Role
 I worked on the heat rejection half of the project, where my contribution combined engineering research, calculation work, and computational modelling.
@@ -15,14 +15,14 @@ I also handled calculations related to the electrical and parasitic load across 
 ## Design Development and Research
 Before arriving at the final concept, we reviewed several possible water-independent heat rejection methods. The report compares air-cooled condensers, natural draft dry cooling towers, porous metal fins, and radiative cooling panels, each with different strengths and weaknesses in footprint, heat transfer capability, and parasitic load. For example, air-cooled condensers were well established but large and relatively limited by air-side heat transfer; radiative cooling was promising in theory but heavily wind-dependent and required a very large footprint; porous metal concepts offered compactness and strong heat transfer but needed further validation. 
 
-To formalise this decision, the team used a weighted Pugh matrix comparing candidate concepts against criteria including parasitic load, heat transfer coefficient, footprint, safety, maintenance, and cost. In that assessment, the porous cube concept achieved the highest total score, largely because its high effective surface area offered strong heat transfer with a reduced footprint. :contentReference[oaicite:3]{index=3}
+To formalise this decision, the team used a weighted Pugh matrix comparing candidate concepts against criteria including parasitic load, heat transfer coefficient, footprint, safety, maintenance, and cost. In that assessment, the porous cube concept achieved the highest total score, largely because its high effective surface area offered strong heat transfer with a reduced footprint.
 
 ## Final Design
 The final design adopted a three-stage heat rejection architecture:
 
 1. **Helium-on-water heat rejection** using a shell-and-tube heat exchanger  
 2. **Steam-on-water heat rejection** using a porous metal cube as the heat transfer medium  
-3. **Steam-on-air heat rejection** using air-cooled condenser modules :contentReference[oaicite:4]{index=4}
+3. **Steam-on-air heat rejection** using air-cooled condenser modules
 
 This architecture was chosen because it addressed the safety requirement of separating the radioactive helium loop while also reducing parasitic load and footprint. The porous receiver increased effective condensation area, while the thermosyphon-based arrangement reduced the need for additional pumping in the steam-side loop through passive two-phase transport. The slides describe this as a scalable concept in which system scaling is linked to thermosyphon count, with operating cost driven primarily by fan power in the dry coolers. 
 
@@ -40,7 +40,7 @@ The final baseline result for the model was:
 - **Total parasitic load:** 3.17 MW  
 - **Parasitic load per MWth rejected:** 21.5 kW  
 - **Dry cooler modules required:** 1700  
-- **Estimated footprint:** 60,214 m² :contentReference[oaicite:8]{index=8}
+- **Estimated footprint:** 60,214 m²
 
 I was involved in the calculation and implementation work behind these load estimates, helping ensure that the design was judged not only by thermal feasibility, but also by its electrical penalty and practical efficiency.
 
@@ -68,7 +68,7 @@ My contribution was helping translate these kinds of calculations and formulae i
 ## Iteration and Validation
 The project was iterative rather than fixed from the start. The slides show that the heat rejection load changed several times as parameters were exchanged with the HTGR subteam: an early literature estimate assumed roughly 3% of ~200 MW for air-cooled condensers, later iterations used 78 MW, then 205 MW when returning to helium gas heat rejection and including pump power, before settling on the updated 147.7 MW value from the reactor model. 
 
-The final result was then compared against industry expectations. The report notes that water-independent air-cooled heat rejection systems typically show parasitic loads in the range of 4–6% of power output, while the model predicted 21.5 kW per MWth rejected, approximately 2.15% of power output, which was considered to be of the same order of magnitude and therefore a promising result. :contentReference[oaicite:11]{index=11}
+The final result was then compared against industry expectations. The report notes that water-independent air-cooled heat rejection systems typically show parasitic loads in the range of 4–6% of power output, while the model predicted 21.5 kW per MWth rejected, approximately 2.15% of power output, which was considered to be of the same order of magnitude and therefore a promising result.
 
 ## Computational Modelling
 
